@@ -13,7 +13,9 @@
 #include "selfdrive/ui/qt/qt_window.h"
 #include "selfdrive/ui/qt/widgets/prime.h"
 #include "selfdrive/ui/qt/widgets/scrollview.h"
-#include "selfdrive/ui/qt/widgets/ssh_keys.h"
+#include "selfdrive/ui/qt/offroad/developer_panel.h"
+#include "selfdrive/ui/qt/offroad/firehose.h"
+
 #include "common/params.h"
 
 JvePilotTogglesPanel::JvePilotTogglesPanel(QWidget *parent) : ListWidget(parent) {
@@ -75,6 +77,13 @@ JvePilotTogglesPanel::JvePilotTogglesPanel(QWidget *parent) : ListWidget(parent)
                            "Always On Lateral Control",
                            "When enabled and ACC is ready, jvePilot will steer even if ACC isn't active",
                            "../assets/img_chffr_wheel.png",
+                           this));
+
+  // Blindspot Lane Highlight Toggle
+  addItem(new ParamControl("jvePilot.settings.blindspotHighlight",
+                           "Blindspot Lane Highlight",
+                           "When a vehicle is detected in your blindspot, the adjacent lane line will turn bold red.",
+                           "../assets/offroad/img_circled_check.png",
                            this));
 
   // Auto enable ACC on start
@@ -210,16 +219,7 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
       "OpenpilotEnabledToggle",
       tr("Enable openpilot"),
       tr("Use the openpilot system for adaptive cruise control and lane keep driver assistance. Your attention is required at all times to use this feature. Changing this setting takes effect when the car is powered off."),
-      "../assets/offroad/icon_openpilot.png",
-    },
-    {
-      "ExperimentalLongitudinalEnabled",
-      tr("openpilot Longitudinal Control (Alpha)"),
-      QString("<b>%1</b><br><br>%2")
-      .arg(tr("WARNING: openpilot longitudinal control is in alpha for this car and will disable Automatic Emergency Braking (AEB)."))
-      .arg(tr("On this car, openpilot defaults to the car's built-in ACC instead of openpilot's longitudinal control. "
-              "Enable this to switch to openpilot longitudinal control. Enabling Experimental mode is recommended when enabling openpilot longitudinal control alpha.")),
-      "../assets/offroad/icon_speed_limit.png",
+      "../assets/img_chffr_wheel.png",
     },
     {
       "ExperimentalMode",
@@ -234,10 +234,30 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
       "../assets/offroad/icon_disengage_on_accelerator.svg",
     },
     {
+      "FirehoseMode",
+      tr("FIREHOSE Mode"),
+      tr("Enable <b>FIREHOSE Mode</b> to get your driving data in the training set.<br><br>"
+         "Follow these steps to get your device ready:<br>"
+         "  1. Bring your device inside and connect to a good USB-C adapter<br>"
+         "  2. Connect to Wi-Fi<br>"
+         "  3. Enable this toggle<br>"
+         "  4. Leave it connected for at least 30 minutes<br>"
+         "<br>"
+         "This toggle turns off once you restart your device. Repeat once a week for maximum effectiveness."
+         ""),
+      "../assets/offroad/icon_warning.png",
+    },
+    {
       "IsLdwEnabled",
       tr("Enable Lane Departure Warnings"),
       tr("Receive alerts to steer back into the lane when your vehicle drifts over a detected lane line without a turn signal activated while driving over 31 mph (50 km/h)."),
       "../assets/offroad/icon_warning.png",
+    },
+    {
+      "AlwaysOnDM",
+      tr("Always-On Driver Monitoring"),
+      tr("Enable driver monitoring even when openpilot is not engaged."),
+      "../assets/offroad/icon_monitoring.png",
     },
     {
       "RecordFront",
@@ -251,20 +271,6 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
       tr("Display speed in km/h instead of mph."),
       "../assets/offroad/icon_metric.png",
     },
-#ifdef ENABLE_MAPS
-    {
-      "NavSettingTime24h",
-      tr("Show ETA in 24h Format"),
-      tr("Use 24h format instead of am/pm"),
-      "../assets/offroad/icon_metric.png",
-    },
-    {
-      "NavSettingLeftSide",
-      tr("Show Map on Left Side of UI"),
-      tr("Show map on left side when in split screen view."),
-      "../assets/offroad/icon_road.png",
-    },
-#endif
   };
 
 
@@ -297,18 +303,13 @@ TogglesPanel::TogglesPanel(SettingsWindow *parent) : ListWidget(parent) {
   // Toggles with confirmation dialogs
   toggles["ExperimentalMode"]->setActiveIcon("../assets/img_experimental.svg");
   toggles["ExperimentalMode"]->setConfirmation(true, true);
-  toggles["ExperimentalLongitudinalEnabled"]->setConfirmation(true, false);
-
-  connect(toggles["ExperimentalLongitudinalEnabled"], &ToggleControl::toggleFlipped, [=]() {
-    updateToggles();
-  });
 }
 
 void TogglesPanel::updateState(const UIState &s) {
   const SubMaster &sm = *(s.sm);
 
-  if (sm.updated("controlsState")) {
-    auto personality = sm["controlsState"].getControlsState().getPersonality();
+  if (sm.updated("selfdriveState")) {
+    auto personality = sm["selfdriveState"].getSelfdriveState().getPersonality();
     if (personality != s.scene.personality && s.scene.started && isVisible()) {
       long_personality_setting->setCheckedButton(static_cast<int>(personality));
     }
@@ -326,7 +327,6 @@ void TogglesPanel::showEvent(QShowEvent *event) {
 
 void TogglesPanel::updateToggles() {
   auto experimental_mode_toggle = toggles["ExperimentalMode"];
-  auto op_long_toggle = toggles["ExperimentalLongitudinalEnabled"];
   const QString e2e_description = QString("%1<br>"
                                           "<h4>%2</h4><br>"
                                           "%3<br>"
@@ -340,17 +340,13 @@ void TogglesPanel::updateToggles() {
                                   .arg(tr("New Driving Visualization"))
                                   .arg(tr("The driving visualization will transition to the road-facing wide-angle camera at low speeds to better show some turns. The Experimental mode logo will also be shown in the top right corner."));
 
-  const bool is_release = params.getBool("IsReleaseBranch");
+  //const bool is_release = paramms.getBool("IsReleaseBranch");
   auto cp_bytes = params.get("CarParamsPersistent");
   if (!cp_bytes.empty()) {
     AlignedBuffer aligned_buf;
     capnp::FlatArrayMessageReader cmsg(aligned_buf.align(cp_bytes.data(), cp_bytes.size()));
     cereal::CarParams::Reader CP = cmsg.getRoot<cereal::CarParams>();
 
-    if (!CP.getExperimentalLongitudinalAvailable() || is_release) {
-      params.remove("ExperimentalLongitudinalEnabled");
-    }
-    op_long_toggle->setVisible(CP.getExperimentalLongitudinalAvailable() && !is_release);
     if (hasLongitudinalControl(CP)) {
       // normal description and toggle
       experimental_mode_toggle->setEnabled(true);
@@ -366,8 +362,8 @@ void TogglesPanel::updateToggles() {
 
       QString long_desc = unavailable + " " + \
                           tr("openpilot longitudinal control may come in a future update.");
-      if (false) {
-        if (is_release) {
+      if (true) {
+        if (false) {
           long_desc = unavailable + " " + tr("An alpha version of openpilot longitudinal control can be tested, along with Experimental mode, on non-release branches.");
         } else {
           long_desc = tr("Enable the openpilot longitudinal control (alpha) toggle to allow Experimental mode.");
@@ -379,7 +375,6 @@ void TogglesPanel::updateToggles() {
     experimental_mode_toggle->refresh();
   } else {
     experimental_mode_toggle->setDescription(e2e_description);
-    op_long_toggle->setVisible(false);
   }
 }
 
@@ -443,8 +438,8 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   });
   addItem(translateBtn);
 
-  QObject::connect(uiState(), &UIState::primeTypeChanged, [this] (PrimeType type) {
-    pair_device->setVisible(type == PrimeType::UNPAIRED);
+  QObject::connect(uiState()->prime_state, &PrimeState::changed, [this] (PrimeState::Type type) {
+    pair_device->setVisible(type == PrimeState::PRIME_TYPE_UNPAIRED);
   });
   QObject::connect(uiState(), &UIState::offroadTransition, [=](bool offroad) {
     for (auto btn : findChildren<ButtonControl *>()) {
@@ -531,21 +526,31 @@ void DevicePanel::poweroff() {
   }
 }
 
-void DevicePanel::showEvent(QShowEvent *event) {
-  pair_device->setVisible(uiState()->primeType() == PrimeType::UNPAIRED);
-  ListWidget::showEvent(event);
-}
-
 void SettingsWindow::showEvent(QShowEvent *event) {
   setCurrentPanel(0);
 }
 
 void SettingsWindow::setCurrentPanel(int index, const QString &param) {
+  if (!param.isEmpty()) {
+    // Check if param ends with "Panel" to determine if it's a panel name
+    if (param.endsWith("Panel")) {
+      QString panelName = param;
+      panelName.chop(5); // Remove "Panel" suffix
+
+      // Find the panel by name
+      for (int i = 0; i < nav_btns->buttons().size(); i++) {
+        if (nav_btns->buttons()[i]->text() == tr(panelName.toStdString().c_str())) {
+          index = i;
+          break;
+        }
+      }
+    } else {
+      emit expandToggleDescription(param);
+    }
+  }
+
   panel_widget->setCurrentIndex(index);
   nav_btns->buttons()[index]->setChecked(true);
-  if (!param.isEmpty()) {
-    emit expandToggleDescription(param);
-  }
 }
 
 SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
@@ -582,12 +587,17 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
   TogglesPanel *toggles = new TogglesPanel(this);
   QObject::connect(this, &SettingsWindow::expandToggleDescription, toggles, &TogglesPanel::expandToggleDescription);
 
+  auto networking = new Networking(this);
+  QObject::connect(uiState()->prime_state, &PrimeState::changed, networking, &Networking::setPrimeType);
+
   QList<QPair<QString, QWidget *>> panels = {
     {tr("Device"), device},
-    {tr("Network"), new Networking(this)},
+    {tr("Network"), networking},
     {tr("Toggles"), toggles},
     {tr("jvePilot"), new JvePilotTogglesPanel(this)},
     {tr("Software"), new SoftwarePanel(this)},
+    {tr("Firehose"), new FirehosePanel(this)},
+    {tr("Developer"), new DeveloperPanel(this)},
   };
 
   nav_btns = new QButtonGroup(this);

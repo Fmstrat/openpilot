@@ -1,3 +1,26 @@
+Version jvePilot-0.9.8(v3.17)
+========================
+* Proper handling of ACC long-press so you can hold it down to increment by 1 or 5
+* Fix beeping on ignition off
+* Change how ACC speed is calculated from the model
+* Improve reliability of ACC auto enable
+* Blindspot lane highlighting. Thanks @mikejakes!
+* Version 0.9.8 (2025-02-28)
+  * New driving model
+    * Model now gates applying positive acceleration in Chill mode
+  * New driving monitoring model
+    * Reduced false positives related to passengers
+  * Image processing pipeline moved to the ISP
+    * More GPU time for bigger driving models
+    * Power draw reduced 0.5W, which means your device runs cooler
+  * Added toggle to enable driver monitoring even when openpilot is not engaged
+  * Localizer rewritten to remove GPS dependency at runtime
+  * Firehose Mode for maximizing your training data uploads
+  * Enable openpilot longitudinal control for Ford Q3 vehicles
+  * New Toyota TSS2 longitudinal tune
+  * Rivian R1S and R1T support thanks to lukasloetkolben!
+  * Ford F-150, F-150 Hybrid, Mach-E, and Ranger support
+
 Version jvePilot-0.9.7(v3.16.5)
 ========================
 Visit http://bit.ly/jvereadme for more information
