@@ -64,6 +64,11 @@ class CarState(CarStateBase):
     self.transmission_gear = None
     self.engine_torque = None
     self.cruise_enabled = False
+    self.brake_hold = False
+    self.acc_accelerating = False
+    self.acc_decelerating = False
+    self.cruise_active_actual = False
+    self.forward_gear = False
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
@@ -99,6 +104,8 @@ class CarState(CarStateBase):
       ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(cp.vl["Transmission_Status"]["Gear_State"], None))
     else:
       ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(cp.vl["GEAR"]["PRNDL"], None))
+    self.forward_gear = ret.gearShifter in FORWARD_GEARS
+
     ret.vEgoRaw = cp.vl["ESP_8"]["Vehicle_Speed"] * CV.KPH_TO_MS
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
     ret.standstill = not ret.vEgoRaw > 0.001
@@ -134,14 +141,14 @@ class CarState(CarStateBase):
       ret.cruiseState.nonAdaptive = False
       ret.cruiseState.standstill = False
       ret.accFaulted = False
-      self.torqMin = cp.vl["DAS_3"]["ENGINE_TORQUE_REQUEST"]
-      self.torqMax = cp.vl["ECM_TRQ"]["ENGINE_TORQ_MAX"]
-      self.transmission_gear = int(cp.vl['TCM_A7']["CurrentGear"])
-      self.gasRpm = cp.vl["ECM_1"]["ENGINE_RPM"]
-      self.engine_torque = cp.vl["ECM_1"]["ENGINE_TORQUE"]
+      self.torqMin = cp_cruise.vl["DAS_3"]["ENGINE_TORQUE_REQUEST"]
+      self.torqMax = cp_cruise.vl["ECM_TRQ"]["ENGINE_TORQ_MAX"]
+      self.transmission_gear = int(cp_cruise.vl['TCM_A7']["CurrentGear"])
+      self.gasRpm = cp_cruise.vl["ECM_1"]["ENGINE_RPM"]
+      self.engine_torque = cp_cruise.vl["ECM_1"]["ENGINE_TORQUE"]
       if self.CP.carFingerprint in HYBRID_CARS:
-        self.wheelTorqMin = cp.vl["AXLE_TORQ"]["AXLE_TORQ_MIN"]
-        self.wheelTorqMax = cp.vl["AXLE_TORQ"]["AXLE_TORQ_MAX"]
+        self.wheelTorqMin = cp_cruise.vl["AXLE_TORQ"]["AXLE_TORQ_MIN"]
+        self.wheelTorqMax = cp_cruise.vl["AXLE_TORQ"]["AXLE_TORQ_MAX"]
     else:
       self.longEnabled = False
       ret.jvePilotCarState.longControl = False
@@ -151,8 +158,15 @@ class CarState(CarStateBase):
       ret.cruiseState.nonAdaptive = cp_cruise.vl["DAS_4"]["ACC_STATE"] in (1, 2)  # 1 NormalCCOn and 2 NormalCCSet
       ret.cruiseState.standstill = cp_cruise.vl["DAS_3"]["ACC_STANDSTILL"] == 1
       ret.accFaulted = cp_cruise.vl["DAS_3"]["ACC_FAULTED"] != 0
+      if not ret.cruiseState.enabled and ret.standstill and self.forward_gear and self.brake_hold:
+        ret.cruiseState.enabled = ret.cruiseState.available # stay enabled
+        ret.cruiseState.standstill = True # we want to resume
 
-    self.das_3 = cp.vl['DAS_3']
+    self.das_3 = cp_cruise.vl['DAS_3']
+    self.acc_accelerating = self.das_3["ENGINE_TORQUE_REQUEST_MAX"] == 1
+    self.acc_decelerating = self.das_3["ACC_DECEL_REQ"] == 1
+    self.cruise_active_actual = self.das_3["ACC_ACTIVE"] == 1
+
     self.das_5 = cp.vl['DAS_5']
     self.lkasHeartbit = cp_cam.vl["LKAS_HEARTBIT"]
     self.cruise_enabled = ret.cruiseState.enabled
@@ -194,7 +208,7 @@ class CarState(CarStateBase):
     ret.jvePilotCarState.autoFollow = self.auto_follow
     ret.jvePilotCarState.lkasDisabled = self.lkas_disabled
     ret.jvePilotCarState.aolcReady = self.cachedParams.get_bool('jvePilot.settings.steer.aolc',1000) \
-                                     and ret.cruiseState.available and ret.gearShifter in FORWARD_GEARS
+                                     and ret.cruiseState.available and self.forward_gear
 
     return ret
 

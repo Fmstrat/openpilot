@@ -2,7 +2,6 @@ from cereal import car
 from common.params import Params
 from opendbc.car.car_helpers import button_pressed
 from opendbc.car.chrysler.values import HYBRID_CARS
-from opendbc.car.interfaces import FORWARD_GEARS
 
 ButtonType = car.CarState.ButtonEvent.Type
 
@@ -27,7 +26,7 @@ class LongCarController:
     elif button_pressed(CS.out, ButtonType.accelCruise) or \
         button_pressed(CS.out, ButtonType.decelCruise) or \
         button_pressed(CS.out, ButtonType.resumeCruise):
-        CS.longEnabled = CS.out.gearShifter in FORWARD_GEARS
+        CS.longEnabled = CS.forward_gear
 
     accDiff = None
     if button_pressed(CS.out, ButtonType.followInc, False):

@@ -1,4 +1,9 @@
-Version jvePilot-0.9.8(v3.17)
+Version jvePilot-0.9.8(v3.18)
+========================
+* Jeeps can now hold the brake after ACC stopes behind a lead car
+* Support for the new acceleration gating in Chill mode
+
+* Version jvePilot-0.9.8(v3.17)
 ========================
 * Proper handling of ACC long-press so you can hold it down to increment by 1 or 5
 * Fix beeping on ignition off

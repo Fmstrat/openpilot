@@ -66,11 +66,11 @@ JvePilotTogglesPanel::JvePilotTogglesPanel(QWidget *parent) : ListWidget(parent)
     }
   };
   addItem(new ParamControl("jvePilot.settings.autoFollow",
-                                  "Start with Auto Follow Enabled",
-                                  "When enabled, jvePilot will enable Auto Follow on the start of every drive.",
-                                  "../assets/jvepilot/settings/icon_auto_follow.png",
-                                  this,
-                                  &autoFollowConfigs));
+                           "Start with Auto Follow Enabled",
+                           "When enabled, jvePilot will enable Auto Follow on the start of every drive.",
+                           "../assets/jvepilot/settings/icon_auto_follow.png",
+                           this,
+                           &autoFollowConfigs));
 
   // Always One Lateral Control
   addItem(new ParamControl("jvePilot.settings.steer.aolc",
@@ -95,19 +95,19 @@ JvePilotTogglesPanel::JvePilotTogglesPanel(QWidget *parent) : ListWidget(parent)
 
   // reverseAccSpeedChange
   addItem(new ParamControl("jvePilot.settings.reverseAccSpeedChange",
-                                  "Reverse ACC +/- Speeds",
-                                  "When enabled, quick pressing the ACC +/- buttons changes the speed in 5 increments."
-                                  " Hold a little longer to change by 1."
-                                  " Disable to keep stock setting.",
-                                  "../assets/jvepilot/settings/icon_acc_speed_change.png",
-                                  this));
+                           "Reverse ACC +/- Speeds",
+                           "When enabled, quick pressing the ACC +/- buttons changes the speed in 5 increments."
+                           " Hold a little longer to change by 1."
+                           " Disable to keep stock setting.",
+                           "../assets/jvepilot/settings/icon_acc_speed_change.png",
+                           this));
 
   // audioAlertOnSteeringLoss
   addItem(new ParamControl("jvePilot.settings.audioAlertOnSteeringLoss",
-                                  "Audio Alert on Steering Loss",
-                                  "When enabled, jvePilot will play an alert when speed it too low to steer.",
-                                  "../assets/jvepilot/settings/alert_steer_loss.png",
-                                  this));
+                           "Audio Alert on Steering Loss",
+                           "When enabled, jvePilot will play an alert when speed it too low to steer.",
+                           "../assets/jvepilot/settings/alert_steer_loss.png",
+                           this));
 
   // accEco
   QList<struct ConfigButton> ecoConfigs = {
@@ -137,11 +137,19 @@ JvePilotTogglesPanel::JvePilotTogglesPanel(QWidget *parent) : ListWidget(parent)
     }
   };
   addItem(new LabelControl("ACC Eco",
-                                  "",
-                                  "Use these settings to tune how much acceleration occurs by limiting how much ACC is set above your current speed.",
-                                  this,
-                                  "../assets/jvepilot/settings/icon_acc_eco.png",
-                                  &ecoConfigs));
+                           "",
+                           "Use these settings to tune how much acceleration occurs by limiting how much ACC is set above your current speed.",
+                           this,
+                           "../assets/jvepilot/settings/icon_acc_eco.png",
+                           &ecoConfigs));
+
+  // Brake Hold
+  addItem(new ParamControl("jvePilot.settings.brakeHold",
+                           "Brake Hold (Jeeps Only)",
+                           "Say stopped when ACC stops behind a lead car then resume when lead car resumes.",
+                           "../assets/jvepilot/settings/icon_brake_hold.svg",
+                           this));
+
 
   // misc
   QList<struct ConfigButton> miscConfigs = {

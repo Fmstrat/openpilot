@@ -31,7 +31,6 @@ def manager_init() -> None:
   params.clear_all(ParamKeyType.CLEAR_ON_OFFROAD_TRANSITION)
   if build_metadata.release_channel:
     params.clear_all(ParamKeyType.DEVELOPMENT_ONLY)
-
   default_params: list[tuple[str, str | bytes]] = [
     ("jvePilot.settings.accEco", "1"),
     ("jvePilot.settings.accEco.speedAheadLevel1", "7"),
@@ -43,6 +42,7 @@ def manager_init() -> None:
     ("jvePilot.settings.autoFollow.speed2-3Bars", "30"),
     ("jvePilot.settings.autoFollow.speed3-4Bars", "65"),
     ("jvePilot.settings.audioAlertOnSteeringLoss", "1"),
+    ("jvePilot.settings.brakeHold", "1"),
     ("jvePilot.settings.steer.aolc", "1"),
     ("jvePilot.settings.steer.noMinimum", "0"),
     ("jvePilot.settings.steer.pid", "0"),
@@ -66,6 +66,7 @@ def manager_init() -> None:
     ("OpenpilotEnabledToggle", "1"),
     ("LongitudinalPersonality", str(log.LongitudinalPersonality.standard)),
   ]
+
 
   if params.get_bool("RecordFrontLock"):
     params.put_bool("RecordFront", True)

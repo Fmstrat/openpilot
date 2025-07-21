@@ -86,7 +86,9 @@ class LongCarControllerV1(LongCarController):
     under_accel_frame_count = 0
     override_request = CS.out.gasPressed or CS.out.brakePressed
     if not override_request:
-      stop_req = long_stopping or (CS.out.standstill and aTarget <= 0.003)
+      stop_req = long_stopping or \
+        (CS.out.standstill and (longitudinalPlan.shouldStop or not longitudinalPlan.allowThrottle))
+
       go_req = not stop_req and CS.out.standstill
 
       if go_req:

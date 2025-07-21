@@ -4,7 +4,7 @@ from opendbc.can.packer import CANPacker
 from opendbc.car import Bus, DT_CTRL, apply_meas_steer_torque_limits
 from opendbc.car.car_helpers import button_pressed
 from opendbc.car.chrysler import chryslercan
-from opendbc.car.chrysler.values import RAM_CARS, CarControllerParams, ChryslerFlags, DRIVE_PERSONALITY
+from opendbc.car.chrysler.values import RAM_CARS, JEEPS, CarControllerParams, ChryslerFlags, DRIVE_PERSONALITY
 from opendbc.car.interfaces import CarControllerBase
 
 from openpilot.selfdrive.car.cruise import V_CRUISE_MIN, V_CRUISE_MIN_IMPERIAL
@@ -47,6 +47,7 @@ class CarController(CarControllerBase):
     self.round_to_unit = CV.MS_TO_KPH if self.settingsParams.get_bool("IsMetric") else CV.MS_TO_MPH
     self.steerNoMinimum = CP.minSteerSpeed < 0
     self.auto_enable_acc = self.settingsParams.get_bool("jvePilot.settings.autoEnableAcc")
+    self.last_das_3_counter = -1
 
     self.autoFollowDistanceLock = None
     self.button_frame = 0
@@ -54,6 +55,9 @@ class CarController(CarControllerBase):
     self.last_personality = None
     self.low_steer = not self.CP.flags & ChryslerFlags.HIGHER_MIN_STEERING_SPEED
     self.steer_gap = 0.5 if self.CP.carFingerprint in RAM_CARS else 3.0
+
+    self.brake_hold_enabled = self.settingsParams.get_bool("jvePilot.settings.brakeHold") and self.CP.carFingerprint in JEEPS
+    self.brake_hold_decel = 0
 
     self.long_controller = LongCarControllerV1(CarController, self.CP, self.params, self.packer)
 
@@ -146,6 +150,7 @@ class CarController(CarControllerBase):
         self.last_personality = personality
         self.settingsParams.put_nonblocking('LongitudinalPersonality', str(personality))
 
+    self.brake_hold(CS, CC, can_sends)
     self.long_controller.acc(self.sm['longitudinalPlan'], self.frame, CC, CS, can_sends)
 
     self.frame += 1
@@ -155,6 +160,38 @@ class CarController(CarControllerBase):
     new_actuators.torqueOutputCan = self.apply_torque_last
 
     return new_actuators, can_sends
+
+  def brake_hold(self, CS, CC, can_sends):
+    counter_das_3_changed = CS.das_3['COUNTER'] != self.last_das_3_counter
+    self.last_das_3_counter = CS.das_3['COUNTER']
+
+    if not CS.brake_hold \
+      and CS.cruise_active_actual and CS.acc_decelerating and CS.out.standstill \
+      and self.brake_hold_enabled:
+      CS.brake_hold = True
+
+    if CS.brake_hold and \
+      (not CC.enabled or not CS.out.cruiseState.enabled
+       or CS.acc_accelerating or not CS.out.standstill
+       or CC.cruiseControl.cancel or button_pressed(CS.out, ButtonType.cancel)
+       or CS.out.gasPressed or CS.out.brakePressed or not CS.forward_gear):
+      CS.brake_hold = False
+      return
+
+    if CS.brake_hold:
+      if CS.cruise_active_actual:
+        self.brake_hold_decel = min(self.brake_hold_decel, CS.das_3['ACC_DECEL']) if CS.out.standstill else -2.0
+      else:
+        can_sends.append(chryslercan.das_3_command(self.packer,
+                                                   2 if counter_das_3_changed else 3,
+                                                   False,
+                                                   False,
+                                                   None,
+                                                   2,
+                                                   False,
+                                                   self.brake_hold_decel,
+                                                   False,
+                                                   CS.das_3))
 
   def wheel_button_control(self, CC, CS, can_sends, enabled, das_bus, cancel, resume):
     button_counter = CS.button_counter
@@ -168,13 +205,14 @@ class CarController(CarControllerBase):
       buttons_to_press = []
       if cancel:
         buttons_to_press = ['ACC_Cancel']
+        CS.brake_hold = False
       elif not button_pressed(CS.out, ButtonType.cancel):
         if enabled and not CS.out.brakePressed:
           button_counter_offset = [1, 1, 0, None][self.button_frame % 4]
           if button_counter_offset is not None:
             if resume:
               buttons_to_press = ["ACC_Resume"]
-            elif CS.out.cruiseState.enabled:  # Control ACC
+            elif CS.cruise_active_actual:  # Control ACC
               buttons_to_press = [self.auto_follow_button(CC, CS), self.hybrid_acc_button(CC, CS)]
 
       # ACC Auto enable
@@ -202,6 +240,9 @@ class CarController(CarControllerBase):
       targetFuture = mean(self.sm['longitudinalPlan'].speeds) + extendFuture + CV.KPH_TO_MS / 2
     else:
       targetFuture = 0
+
+    if not self.sm['longitudinalPlan'].allowThrottle: # coasting?
+      targetFuture = CS.out.vEgo - CV.MPH_TO_MS * 4
 
     target = self.acc_hysteresis(targetFuture)
     if eco_limit:

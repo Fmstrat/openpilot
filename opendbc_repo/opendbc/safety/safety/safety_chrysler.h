@@ -89,7 +89,7 @@ static void chrysler_rx_hook(const CANPacket_t *to_push) {
       const bool lkas_enabled = GET_BIT(to_push, 21U) || ((alternative_experience & ALT_EXP_AOLC_ENABLED) && cruise_available);
       pcm_cruise_check(lkas_enabled);
 
-      long_allowed = !cruise_available && (alternative_experience & ALT_EXP_LONG_ENABLED);
+      long_allowed = !vehicle_moving || (!cruise_available && (alternative_experience & ALT_EXP_LONG_ENABLED));
       if (long_allowed) {
         pcm_cruise_check(false);
         pcm_cruise_check(true);
